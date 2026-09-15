@@ -17,7 +17,7 @@ function formatWorkout(array $workout): string {
     return "<strong>{$workout['type']}</strong> ({$workout['date']}) — Тривалість: {$workout['durationMin']} хв.";
 }
 
-
+// крок 6 обчислення агрегатного показника (сумарна кількість спалених калорій)
 $totalCalories = 0;
 foreach ($workouts as $workout) {
     $totalCalories += $workout['caloriesBurned'];
