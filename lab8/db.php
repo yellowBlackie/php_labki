@@ -26,9 +26,9 @@ try {
         $options
     );
 } catch (PDOException $e) {
-    // Деталі помилки не показуємо користувачу
+    // Технічні деталі залишаються тільки в логах сервера
     error_log(
-        'Lab6 database connection error: ' .
+        'Lab8 database connection error: ' .
         $e->getMessage()
     );
 

@@ -1,9 +1,16 @@
 <?php
 
-header('Content-Type: application/json; charset=utf-8');
-ini_set('display_errors', '0');
+session_start();
 
-require_once 'csrf.php';
+if (empty($_SESSION['user_id'])) {
+    $_SESSION['user_id'] = 1;
+}
+
+header('Content-Type: application/json; charset=utf-8');
+
+// Не показуємо користувачу сирі PHP-помилки.
+// Деталі помилок записуються в лог.
+ini_set('display_errors', '0');
 
 try {
     require_once 'db.php';
@@ -17,26 +24,24 @@ try {
         sendError('Невідомий ресурс.', 404);
     }
 
-    // GET: список, один запис або отримання CSRF-токена
     if ($method === 'GET') {
-        if ($action === 'csrf') {
-            sendSuccess([
-                'csrf_token' => getCsrfToken()
-            ], 200);
-        }
 
-        if ($action !== null) {
-            sendError('Невідома дія.', 400);
-        }
-
-        if ($id === null) {
-            listWorkouts($pdo);
-        }
-
-        getWorkout($pdo, $id);
+    // Доменні дії не дозволяємо запускати через GET
+    if ($action !== null) {
+        sendError(
+            'Дія доступна лише через POST.',
+            405
+        );
     }
 
-    // POST: створення тренування або статистика
+    if ($id === null) {
+        listWorkouts($pdo);
+    } else {
+        getWorkout($pdo, $id);
+    }
+}
+
+    // POST: додавання, статистика або редагування тренування
     if ($method === 'POST') {
         if ($action === null) {
             createWorkout($pdo);
@@ -46,14 +51,21 @@ try {
             getWorkoutStats($pdo);
         }
 
+        if ($action === 'update') {
+            updateWorkout($pdo);
+        }
+
         sendError('Невідома дія.', 400);
     }
 
+    // Дії, які змінюють дані, через GET не виконуються.
+    // PUT, DELETE та інші методи також не підтримуються.
     sendError('Метод не підтримується.', 405);
 
 } catch (Throwable $e) {
+    // Детальна помилка залишається тільки в логах сервера
     error_log(
-        'Lab7 API error: ' .
+        'Lab8 error: ' .
         $e->getMessage()
     );
 
@@ -64,17 +76,17 @@ try {
 }
 
 
-// Повертає шлях до файлу кешу
+// Повертає шлях до файлового кешу
 function getTotalsCacheFile(): string
 {
     return sys_get_temp_dir()
         . DIRECTORY_SEPARATOR
-        . 'lab7_workout_totals.json';
+        . 'lab8_workout_totals.json';
 }
 
 
 // Отримує сумарні калорії за типами.
-// Якщо кеш актуальний, SQL-запит не виконується.
+// Якщо кеш актуальний, додатковий SQL-запит не виконується.
 function getCachedTotalsByType(
     PDO $pdo,
     int $ttlSeconds = 60
@@ -142,11 +154,38 @@ function clearWorkoutCache(): void
 }
 
 
+// Перевіряє CSRF-токен для POST-запитів
+function verifyCsrfToken(array $data): void
+{
+    $sessionToken =
+        $_SESSION['csrf_token'] ?? '';
+
+    $requestToken =
+        $data['csrf_token'] ?? '';
+
+    if (
+        $sessionToken === '' ||
+        $requestToken === '' ||
+        !hash_equals(
+            $sessionToken,
+            $requestToken
+        )
+    ) {
+        sendError(
+            'Недійсний CSRF-токен.',
+            403
+        );
+    }
+}
+
+
 // GET: список тренувань.
-// Параметр type є необов'язковим і використовує prepared statement.
+// Параметр type передається в prepared statement,
+// тому не може змінити структуру SQL-запиту.
 function listWorkouts(PDO $pdo): void
 {
     $start = microtime(true);
+
     $sqlQueries = 0;
 
     $type = trim(
@@ -161,12 +200,12 @@ function listWorkouts(PDO $pdo): void
                     calories_burned,
                     workout_date
              FROM workouts
-             WHERE type = :type
+             WHERE type LIKE :type
              ORDER BY workout_date DESC, id DESC'
         );
 
         $stmt->execute([
-            ':type' => $type
+            ':type' => '%' . $type . '%'
         ]);
     } else {
         $stmt = $pdo->query(
@@ -182,9 +221,9 @@ function listWorkouts(PDO $pdo): void
 
     $sqlQueries++;
 
-    $workouts = $stmt->fetchAll();
+    $workouts =
+        $stmt->fetchAll();
 
-    // Замість N+1 використовуємо один GROUP BY або кеш
     $totalsResult =
         getCachedTotalsByType(
             $pdo,
@@ -236,7 +275,7 @@ function listWorkouts(PDO $pdo): void
 }
 
 
-// GET: одне тренування
+// GET: одне тренування за id
 function getWorkout(
     PDO $pdo,
     $id
@@ -291,6 +330,7 @@ function createWorkout(PDO $pdo): void
     $data =
         getRequestData();
 
+    // CSRF перевіряється на сервері
     verifyCsrfToken($data);
 
     $type = trim(
@@ -310,6 +350,7 @@ function createWorkout(PDO $pdo): void
         ?? ''
     );
 
+    // Серверна перевірка обов'язкових полів
     if ($type === '') {
         sendError(
             'Поле type є обов’язковим.',
@@ -344,6 +385,7 @@ function createWorkout(PDO $pdo): void
         );
     }
 
+    // Обмежуємо довжину типу тренування
     if (mb_strlen($type) > 100) {
         sendError(
             'Поле type є занадто довгим.',
@@ -351,6 +393,7 @@ function createWorkout(PDO $pdo): void
         );
     }
 
+    // Тривалість має бути додатним цілим числом
     if (
         filter_var(
             $duration,
@@ -364,6 +407,7 @@ function createWorkout(PDO $pdo): void
         );
     }
 
+    // Калорії не можуть бути від'ємними
     if (
         filter_var(
             $calories,
@@ -377,6 +421,7 @@ function createWorkout(PDO $pdo): void
         );
     }
 
+    // Перевіряємо правильність дати
     $dateObject =
         DateTime::createFromFormat(
             'Y-m-d',
@@ -394,42 +439,46 @@ function createWorkout(PDO $pdo): void
         );
     }
 
-    $stmt = $pdo->prepare(
+    // INSERT виконується тільки через prepared statement
+        $stmt = $pdo->prepare(
         'INSERT INTO workouts
-         (
+        (
+            owner_id,
             type,
             duration_min,
             calories_burned,
             workout_date
-         )
-         VALUES
-         (
+        )
+        VALUES
+        (
+            :owner_id,
             :type,
             :duration,
             :calories,
             :date
-         )'
+        )'
     );
 
     $stmt->execute([
+        ':owner_id' =>
+            (int)$_SESSION['user_id'],
         ':type' =>
             $type,
-
         ':duration' =>
             (int)$duration,
-
         ':calories' =>
             (int)$calories,
-
         ':date' =>
             $date
     ]);
 
+    // Після зміни даних очищаємо кеш
     clearWorkoutCache();
 
     $newId =
         (int)$pdo->lastInsertId();
 
+    // Отримуємо щойно створений запис
     $stmt = $pdo->prepare(
         'SELECT id,
                 type,
@@ -444,23 +493,200 @@ function createWorkout(PDO $pdo): void
         ':id' => $newId
     ]);
 
+    $workout =
+        $stmt->fetch();
+
     sendSuccess(
-        $stmt->fetch(),
+        $workout,
         201
     );
 }
 
 
-// POST action=stats
-function getWorkoutStats(PDO $pdo): void
+// POST action=update:
+// редагує тільки тренування поточного користувача
+function updateWorkout(PDO $pdo): void
 {
+    $data = getRequestData();
+
+    // Редагування захищене CSRF-токеном
+    verifyCsrfToken($data);
+
+    $id =
+        $data['id']
+        ?? null;
+
+    $type = trim(
+        $data['type']
+        ?? ''
+    );
+
+    $duration =
+        $data['duration_min']
+        ?? null;
+
+    $calories =
+        $data['calories_burned']
+        ?? null;
+
+    $date = trim(
+        $data['workout_date']
+        ?? ''
+    );
+
+    // Перевірка id
+    if (
+        filter_var(
+            $id,
+            FILTER_VALIDATE_INT
+        ) === false ||
+        (int)$id <= 0
+    ) {
+        sendError(
+            'Некоректний id.',
+            400
+        );
+    }
+
+    // Перевірка type
+    if ($type === '') {
+        sendError(
+            'Поле type є обов’язковим.',
+            400
+        );
+    }
+
+    if (mb_strlen($type) > 100) {
+        sendError(
+            'Поле type є занадто довгим.',
+            400
+        );
+    }
+
+    // Перевірка тривалості
+    if (
+        filter_var(
+            $duration,
+            FILTER_VALIDATE_INT
+        ) === false ||
+        (int)$duration <= 0
+    ) {
+        sendError(
+            'duration_min має бути додатним цілим числом.',
+            400
+        );
+    }
+
+    // Перевірка калорій
+    if (
+        filter_var(
+            $calories,
+            FILTER_VALIDATE_INT
+        ) === false ||
+        (int)$calories < 0
+    ) {
+        sendError(
+            'calories_burned має бути невід’ємним цілим числом.',
+            400
+        );
+    }
+
+    // Перевірка дати
+    $dateObject =
+        DateTime::createFromFormat(
+            'Y-m-d',
+            $date
+        );
+
+    if (
+        !$dateObject ||
+        $dateObject->format('Y-m-d')
+            !== $date
+    ) {
+        sendError(
+            'workout_date має бути у форматі YYYY-MM-DD.',
+            400
+        );
+    }
+
+    $ownerId =
+        (int)$_SESSION['user_id'];
+
+    // Спочатку отримуємо власника тренування
+    $stmt = $pdo->prepare(
+        'SELECT id, owner_id
+         FROM workouts
+         WHERE id = :id'
+    );
+
+    $stmt->execute([
+        ':id' => (int)$id
+    ]);
+
+    $workout =
+        $stmt->fetch();
+
+    if (!$workout) {
+        sendError(
+            'Тренування не знайдено.',
+            404
+        );
+    }
+
+    // Забороняємо редагування чужого тренування
+    if (
+        (int)$workout['owner_id']
+        !== $ownerId
+    ) {
+        sendError(
+            'Немає прав на редагування цього тренування.',
+            403
+        );
+    }
+
+    // UPDATE також обмежений owner_id
+    $stmt = $pdo->prepare(
+        'UPDATE workouts
+         SET type = :type,
+             duration_min = :duration,
+             calories_burned = :calories,
+             workout_date = :date
+         WHERE id = :id
+           AND owner_id = :owner_id'
+    );
+
+    $stmt->execute([
+        ':type' => $type,
+        ':duration' => (int)$duration,
+        ':calories' => (int)$calories,
+        ':date' => $date,
+        ':id' => (int)$id,
+        ':owner_id' => $ownerId
+    ]);
+
+    clearWorkoutCache();
+
+    sendSuccess([
+        'id' => (int)$id,
+        'message' =>
+            'Тренування успішно оновлено.'
+    ], 200);
+}
+
+// POST action=stats:
+// повертає сумарні калорії за поточним фільтром
+function getWorkoutStats(
+    PDO $pdo
+): void {
     $data =
         getRequestData();
 
+    // Доменна POST-дія також захищена CSRF
     verifyCsrfToken($data);
 
     $type = trim(
         $data['type']
+        ?? $_GET['type']
         ?? ''
     );
 
@@ -476,7 +702,9 @@ function getWorkoutStats(PDO $pdo): void
     $totalCalories = 0;
 
     if ($type === '') {
-        foreach ($totals as $value) {
+        foreach (
+            $totals as $value
+        ) {
             $totalCalories +=
                 (int)$value;
         }
@@ -550,7 +778,7 @@ function getRequestData(): array
 }
 
 
-// Успішна відповідь
+// Успішна JSON-відповідь
 function sendSuccess(
     $data,
     int $statusCode = 200
@@ -568,7 +796,7 @@ function sendSuccess(
 }
 
 
-// Відповідь з помилкою
+// JSON-відповідь з помилкою
 function sendError(
     string $message,
     int $statusCode

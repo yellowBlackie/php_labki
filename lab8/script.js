@@ -1,28 +1,21 @@
-const results =
-    document.getElementById('results');
-
-const searchInput =
-    document.getElementById('search');
-
-const totalCaloriesElement =
-    document.getElementById('totalCalories');
-
-const messageElement =
-    document.getElementById('message');
-
-const addWorkoutForm =
-    document.getElementById('addWorkoutForm');
+const results = document.getElementById('results');
+const searchInput = document.getElementById('search');
+const totalCaloriesElement = document.getElementById('totalCalories');
+const messageElement = document.getElementById('message');
+const addWorkoutForm = document.getElementById('addWorkoutForm');
 
 
-// Завантажує список тренувань
+// Завантажує список тренувань.
+// Якщо є текст пошуку, передаємо його як фільтр type.
 async function loadWorkouts(search = '') {
     try {
-        const url =
-            'api_list.php?q=' +
-            encodeURIComponent(search);
+        let url = 'api.php?resource=workouts';
 
-        const response =
-            await fetch(url);
+        if (search.trim() !== '') {
+            url += '&type=' + encodeURIComponent(search);
+        }
+
+        const response = await fetch(url);
 
         if (!response.ok) {
             throw new Error(
@@ -30,10 +23,18 @@ async function loadWorkouts(search = '') {
             );
         }
 
-        const workouts =
-            await response.json();
+        const result = await response.json();
 
-        renderWorkouts(workouts);
+        if (!result.success) {
+            throw new Error(
+                result.error ||
+                'Не вдалося отримати тренування.'
+            );
+        }
+
+        renderWorkouts(
+            result.data.workouts
+        );
 
     } catch (error) {
         console.error(error);
@@ -54,9 +55,6 @@ async function loadWorkouts(search = '') {
         row.appendChild(cell);
         results.appendChild(row);
 
-        totalCaloriesElement.textContent =
-            '0';
-
         showMessage(
             'Помилка завантаження даних.',
             'error'
@@ -65,8 +63,9 @@ async function loadWorkouts(search = '') {
 }
 
 
-// Безпечно виводить дані в таблицю.
-// textContent не виконує HTML або JavaScript.
+// Виводить список тренувань у таблицю.
+// Для даних користувача використовується textContent,
+// тому HTML та JavaScript з поля type не виконуються.
 function renderWorkouts(workouts) {
     results.innerHTML = '';
 
@@ -107,6 +106,7 @@ function renderWorkouts(workouts) {
         const dateCell =
             document.createElement('td');
 
+
         idCell.textContent =
             String(workout.id);
 
@@ -122,6 +122,7 @@ function renderWorkouts(workouts) {
         dateCell.textContent =
             String(workout.workout_date);
 
+
         row.appendChild(idCell);
         row.appendChild(typeCell);
         row.appendChild(durationCell);
@@ -133,25 +134,46 @@ function renderWorkouts(workouts) {
 }
 
 
-// Завантажує сумарні калорії
 async function loadStats() {
     try {
-        const response =
-            await fetch(
-                'api_stats.php'
-            );
+        const csrfToken =
+            document.getElementById(
+                'csrf_token'
+            ).value;
 
-        if (!response.ok) {
+        const formData =
+            new FormData();
+
+        formData.append(
+            'csrf_token',
+            csrfToken
+        );
+
+        const response = await fetch(
+            'api.php?resource=workouts&action=stats',
+            {
+                method: 'POST',
+                body: formData
+            }
+        );
+
+        const result =
+            await response.json();
+
+        if (
+            !response.ok ||
+            !result.success
+        ) {
             throw new Error(
-                'Помилка завантаження статистики.'
+                result.error ||
+                'Не вдалося отримати статистику.'
             );
         }
 
-        const data =
-            await response.json();
-
         totalCaloriesElement.textContent =
-            String(data.total_calories);
+            String(
+                result.data.total_calories
+            );
 
     } catch (error) {
         console.error(error);
@@ -160,26 +182,27 @@ async function loadStats() {
             '—';
 
         showMessage(
-            'Не вдалося завантажити суму калорій.',
+            error.message,
             'error'
         );
     }
 }
 
 
-// Виводить повідомлення користувачу
+// Показує повідомлення користувачу.
 function showMessage(text, type = '') {
     messageElement.textContent = text;
-
     messageElement.className =
         `message ${type}`;
 }
 
 
-// Живий пошук за типом тренування
+// Живий пошук за типом тренування.
 searchInput.addEventListener(
     'input',
     () => {
+        showMessage('');
+
         loadWorkouts(
             searchInput.value
         );
@@ -187,8 +210,7 @@ searchInput.addEventListener(
 );
 
 
-// Додає нове тренування.
-// FormData автоматично включає прихований csrf_token.
+// Додавання нового тренування.
 addWorkoutForm.addEventListener(
     'submit',
     async (event) => {
@@ -198,27 +220,27 @@ addWorkoutForm.addEventListener(
         showMessage('');
 
         const formData =
-            new FormData(
-                addWorkoutForm
-            );
+            new FormData(addWorkoutForm);
 
         try {
-            const response =
-                await fetch(
-                    'api_add.php',
-                    {
-                        method: 'POST',
-                        body: formData
-                    }
-                );
+            const response = await fetch(
+                'api.php?resource=workouts',
+                {
+                    method: 'POST',
+                    body: formData
+                }
+            );
 
-            const data =
+            const result =
                 await response.json();
 
-            if (!response.ok) {
+            if (
+                !response.ok ||
+                !result.success
+            ) {
                 throw new Error(
-                    data.error ||
-                    'Помилка додавання.'
+                    result.error ||
+                    'Не вдалося додати тренування.'
                 );
             }
 
@@ -246,6 +268,6 @@ addWorkoutForm.addEventListener(
 );
 
 
-// Початкове завантаження сторінки
+// Початкове завантаження сторінки.
 loadWorkouts();
 loadStats();

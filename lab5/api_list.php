@@ -1,12 +1,26 @@
 <?php
 
-require_once 'db.php';
-
 header('Content-Type: application/json; charset=utf-8');
+ini_set('display_errors', '0');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
+    http_response_code(405);
+
+    echo json_encode([
+        'error' => 'Дозволено лише GET-запит.'
+    ], JSON_UNESCAPED_UNICODE);
+
+    exit;
+}
 
 try {
-    $search = trim($_GET['q'] ?? '');
+    require_once 'db.php';
 
+    $search = trim(
+        $_GET['q'] ?? ''
+    );
+
+    // Для пошуку використовується prepared statement
     if ($search !== '') {
         $stmt = $pdo->prepare(
             'SELECT id, type, duration_min, calories_burned, workout_date
@@ -33,7 +47,12 @@ try {
         JSON_UNESCAPED_UNICODE
     );
 
-} catch (PDOException $e) {
+} catch (Throwable $e) {
+    error_log(
+        'Lab5 api_list error: ' .
+        $e->getMessage()
+    );
+
     http_response_code(500);
 
     echo json_encode([

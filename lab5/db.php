@@ -1,20 +1,34 @@
 <?php
+
 $host = 'localhost';
-$port = '3307'; 
-$db   = 'practicum4';
-$user = 'root'; 
-$pass = '';     
+$port = '3307';
+$db = 'practicum4';
+$user = 'root';
+$pass = '';
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;port=$port;dbname=$db;charset=$charset";
+
 $options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
 ];
 
 try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int)$e->getCode());
+    $pdo = new PDO(
+        $dsn,
+        $user,
+        $pass,
+        $options
+    );
+} catch (PDOException $e) {
+    // Деталі помилки залишаємо тільки в логах сервера
+    error_log(
+        'Lab5 database connection error: ' .
+        $e->getMessage()
+    );
+
+    throw new RuntimeException(
+        'Database connection failed.'
+    );
 }
-?>

@@ -1,8 +1,23 @@
 <?php
 
-require_once 'csrf.php';
+session_start();
 
-$csrfToken = getCsrfToken();
+// Для навчального прикладу вважаємо,
+// що в системі авторизований користувач з id = 1.
+if (empty($_SESSION['user_id'])) {
+    $_SESSION['user_id'] = 1;
+}
+    
+// Для кожної сесії створюємо CSRF-токен
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] =
+        bin2hex(
+            random_bytes(32)
+        );
+}
+
+$csrfToken =
+    $_SESSION['csrf_token'];
 
 ?>
 <!DOCTYPE html>
@@ -16,7 +31,9 @@ $csrfToken = getCsrfToken();
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>Фітнес-трекер — Практична робота №5</title>
+    <title>
+        Фітнес-трекер — Практична робота №8
+    </title>
 
     <style>
         body {
@@ -56,7 +73,7 @@ $csrfToken = getCsrfToken();
 
         button {
             padding: 10px 18px;
-            background: #007bff;
+            background: #4c7df0;
             color: white;
             border: none;
             border-radius: 4px;
@@ -64,7 +81,7 @@ $csrfToken = getCsrfToken();
         }
 
         button:hover {
-            background: #0056b3;
+            opacity: 0.9;
         }
 
         .total-calories {
@@ -101,6 +118,14 @@ $csrfToken = getCsrfToken();
 
         .success {
             color: #2e7d32;
+        }
+
+        .security-info {
+            margin-top: 25px;
+            padding: 15px;
+            background: #f4f4f4;
+            border-radius: 6px;
+            font-size: 14px;
         }
     </style>
 </head>
@@ -170,16 +195,23 @@ $csrfToken = getCsrfToken();
 
         <form id="addWorkoutForm">
 
+            <!--
+                CSRF-токен зберігається в сесії
+                і автоматично відправляється разом із FormData.
+            -->
             <input
                 type="hidden"
                 id="csrf_token"
                 name="csrf_token"
-                value="<?= htmlspecialchars(
-                    $csrfToken,
-                    ENT_QUOTES,
-                    'UTF-8'
-                ) ?>"
+                value="<?=
+                    htmlspecialchars(
+                        $csrfToken,
+                        ENT_QUOTES,
+                        'UTF-8'
+                    )
+                ?>"
             >
+
 
             <div class="form-group">
 
@@ -197,6 +229,7 @@ $csrfToken = getCsrfToken();
 
             </div>
 
+
             <div class="form-group">
 
                 <label for="duration_min">
@@ -212,6 +245,7 @@ $csrfToken = getCsrfToken();
                 >
 
             </div>
+
 
             <div class="form-group">
 
@@ -229,6 +263,7 @@ $csrfToken = getCsrfToken();
 
             </div>
 
+
             <div class="form-group">
 
                 <label for="workout_date">
@@ -244,11 +279,21 @@ $csrfToken = getCsrfToken();
 
             </div>
 
+
             <button type="submit">
                 Додати тренування
             </button>
 
         </form>
+
+    </div>
+
+
+    <div class="security-info">
+
+        Практична робота №8:
+        перевірка SQL Injection, XSS,
+        CSRF та серверної валідації.
 
     </div>
 

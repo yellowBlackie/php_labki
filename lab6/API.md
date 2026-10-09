@@ -21,152 +21,87 @@ resource=workouts
 
 Поля тренування:
 
-- `id` — ідентифікатор тренування;
-- `type` — тип тренування;
-- `duration_min` — тривалість тренування у хвилинах;
-- `calories_burned` — кількість спалених калорій;
-- `workout_date` — дата тренування.
+- `id`
+- `type`
+- `duration_min`
+- `calories_burned`
+- `workout_date`
 
-Усі відповіді API повертаються у форматі JSON.
-
-Успішна відповідь:
-
-```json
-{
-  "success": true,
-  "data": {}
-}
-```
-
-Відповідь з помилкою:
-
-```json
-{
-  "success": false,
-  "error": "Опис помилки"
-}
-```
+Усі відповіді повертаються у форматі JSON.
 
 ---
 
-## 1. Отримати список усіх тренувань
-
-### Запит
+## 1. Отримати всі тренування
 
 ```http
 GET /api.php?resource=workouts
 ```
 
-### Успішна відповідь
-
-HTTP статус:
+Успішна відповідь:
 
 ```text
 200 OK
-```
-
-Приклад:
-
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "10",
-      "type": "Біг",
-      "duration_min": "25",
-      "calories_burned": "270",
-      "workout_date": "2026-10-03"
-    },
-    {
-      "id": "11",
-      "type": "Плавання",
-      "duration_min": "40",
-      "calories_burned": "350",
-      "workout_date": "2026-10-02"
-    }
-  ]
-}
 ```
 
 ---
 
 ## 2. Отримати тренування за ID
 
-### Запит
-
 ```http
 GET /api.php?resource=workouts&id=11
 ```
 
-### Успішна відповідь
-
-HTTP статус:
+Якщо запис існує:
 
 ```text
 200 OK
 ```
 
-Приклад:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "11",
-    "type": "Плавання",
-    "duration_min": "40",
-    "calories_burned": "350",
-    "workout_date": "2026-10-02"
-  }
-}
-```
-
-### Якщо тренування не знайдено
-
-Наприклад:
-
-```http
-GET /api.php?resource=workouts&id=99999
-```
-
-HTTP статус:
+Якщо запис не знайдено:
 
 ```text
 404 Not Found
 ```
 
-Відповідь:
-
-```json
-{
-  "success": false,
-  "error": "Тренування не знайдено."
-}
-```
-
-### Якщо ID некоректний
-
-HTTP статус:
+Якщо `id` некоректний:
 
 ```text
 400 Bad Request
+```
+
+---
+
+## 3. Отримати CSRF-токен
+
+POST-дії захищені CSRF-токеном.
+
+Спочатку потрібно отримати токен і зберегти cookie сесії.
+
+```bash
+curl.exe -s -c lab6_cookie.txt "http://localhost/labki_php/lab6/api.php?resource=workouts&action=csrf"
 ```
 
 Приклад відповіді:
 
 ```json
 {
-  "success": false,
-  "error": "Некоректний id."
+  "success": true,
+  "data": {
+    "csrf_token": "..."
+  }
 }
+```
+
+У PowerShell токен можна отримати так:
+
+```powershell
+$csrfResponse = curl.exe -s -b lab6_cookie.txt "http://localhost/labki_php/lab6/api.php?resource=workouts&action=csrf" | ConvertFrom-Json
+$csrf = $csrfResponse.data.csrf_token
 ```
 
 ---
 
-## 3. Створити нове тренування
-
-### Запит
+## 4. Створити нове тренування
 
 ```http
 POST /api.php?resource=workouts
@@ -174,127 +109,76 @@ POST /api.php?resource=workouts
 
 Обов'язкові поля:
 
-- `type`;
-- `duration_min`;
-- `calories_burned`;
-- `workout_date`.
+- `csrf_token`
+- `type`
+- `duration_min`
+- `calories_burned`
+- `workout_date`
 
-Приклад даних:
+Приклад:
 
-```text
-type=Cardio
-duration_min=35
-calories_burned=280
-workout_date=2026-10-06
+```powershell
+curl.exe -i -b lab6_cookie.txt -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts" `
+  --data-urlencode "csrf_token=$csrf" `
+  --data-urlencode "type=Cardio" `
+  --data "duration_min=35&calories_burned=280&workout_date=2026-10-06"
 ```
 
-### Успішна відповідь
-
-HTTP статус:
+Успішна відповідь:
 
 ```text
 201 Created
 ```
 
-Приклад:
+Без токена або з неправильним токеном:
 
-```json
-{
-  "success": true,
-  "data": {
-    "id": "14",
-    "type": "Cardio",
-    "duration_min": "35",
-    "calories_burned": "280",
-    "workout_date": "2026-10-06"
-  }
-}
+```text
+403 Forbidden
 ```
 
 ---
 
-## 4. Помилка при створенні тренування
+## 5. Серверна валідація
 
-Якщо обов'язкове поле відсутнє або має некоректне значення, API повертає:
+API перевіряє:
+
+- `type` — обов'язковий рядок;
+- `duration_min` — додатне ціле число;
+- `calories_burned` — невід'ємне ціле число;
+- `workout_date` — формат `YYYY-MM-DD`.
+
+Некоректні дані повертають:
 
 ```text
 400 Bad Request
 ```
 
-Наприклад, якщо не передано `calories_burned`:
-
-```json
-{
-  "success": false,
-  "error": "Поле calories_burned є обов’язковим."
-}
-```
-
-Також перевіряються:
-
-- `duration_min` — має бути додатним цілим числом;
-- `calories_burned` — має бути невід'ємним цілим числом;
-- `workout_date` — має відповідати формату `YYYY-MM-DD`.
-
 ---
 
-## 5. Отримати статистику калорій
-
-Доменна дія для варіанта №4:
-
-```text
-action=stats
-```
-
-### Запит без фільтра
+## 6. Доменна дія stats
 
 ```http
 POST /api.php?resource=workouts&action=stats
 ```
 
-Повертає суму `calories_burned` для всіх тренувань.
+Дія також потребує правильного CSRF-токена.
 
-HTTP статус:
+Без фільтра:
 
-```text
-200 OK
+```powershell
+curl.exe -i -b lab6_cookie.txt -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts&action=stats" `
+  --data-urlencode "csrf_token=$csrf"
 ```
 
-Приклад відповіді:
+З фільтром:
 
-```json
-{
-  "success": true,
-  "data": {
-    "filter": null,
-    "total_calories": 2590
-  }
-}
+```powershell
+curl.exe -i -b lab6_cookie.txt -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts&action=stats" `
+  --data-urlencode "csrf_token=$csrf" `
+  --data-urlencode "type=Біг"
 ```
 
-Фактичне значення `total_calories` залежить від записів у базі даних.
-
----
-
-## 6. Статистика з фільтром за типом тренування
-
-У нашій реалізації параметр `type` використовується як поточний фільтр.
-
-### Запит
-
-```http
-POST /api.php?resource=workouts&action=stats
-```
-
-Передані дані:
-
-```text
-type=Біг
-```
-
-API виконує сумування калорій тільки для тренувань, тип яких відповідає фільтру.
-
-Приклад відповіді:
+Приклад результату:
 
 ```json
 {
@@ -310,62 +194,50 @@ API виконує сумування калорій тільки для тре�
 
 ## 7. Невідомий ресурс
 
-Наприклад:
-
 ```http
 GET /api.php?resource=books
 ```
 
-HTTP статус:
+Результат:
 
 ```text
 404 Not Found
 ```
 
-Відповідь:
-
-```json
-{
-  "success": false,
-  "error": "Невідомий ресурс."
-}
-```
-
 ---
 
-## 8. Невідома дія
+## 8. Непідтримуваний HTTP-метод
 
 Наприклад:
 
-```http
-POST /api.php?resource=workouts&action=test
+```bash
+curl.exe -i -X PUT "http://localhost/labki_php/lab6/api.php?resource=workouts"
 ```
 
-Відповідь:
-
-```json
-{
-  "success": false,
-  "error": "Невідома дія."
-}
-```
-
----
-
-## 9. Непідтримуваний HTTP-метод
-
-Якщо для ресурсу `workouts` використовується метод, який API не підтримує, наприклад `PUT` або `DELETE`, повертається:
+Результат:
 
 ```text
 405 Method Not Allowed
 ```
 
-Приклад відповіді:
+---
+
+## 9. Безпечна обробка помилок
+
+Сирі повідомлення `PDOException`, `SQLSTATE`, stack trace та локальні шляхи не повертаються користувачу.
+
+Деталі помилки записуються через:
+
+```php
+error_log()
+```
+
+Клієнт отримує загальне повідомлення:
 
 ```json
 {
   "success": false,
-  "error": "Метод не підтримується."
+  "error": "Внутрішня помилка сервера."
 }
 ```
 
@@ -375,49 +247,10 @@ POST /api.php?resource=workouts&action=test
 
 | Код | Значення | Використання |
 |---|---|---|
-| `200` | OK | Успішний GET або виконання статистики |
-| `201` | Created | Нове тренування успішно створено |
-| `400` | Bad Request | Некоректні або відсутні дані |
-| `404` | Not Found | Ресурс або тренування не знайдено |
-| `405` | Method Not Allowed | HTTP-метод не підтримується |
-| `500` | Internal Server Error | Помилка роботи з базою даних |
-
----
-
-## Приклади тестування через curl
-
-### Отримати список
-
-```bash
-curl.exe -i "http://localhost/labki_php/lab6/api.php?resource=workouts"
-```
-
-### Отримати один запис
-
-```bash
-curl.exe -i "http://localhost/labki_php/lab6/api.php?resource=workouts&id=11"
-```
-
-### Створити тренування
-
-```bash
-curl.exe -i -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts" -H "Content-Type: application/x-www-form-urlencoded" --data "type=Cardio&duration_min=35&calories_burned=280&workout_date=2026-10-06"
-```
-
-### Отримати статистику
-
-```bash
-curl.exe -i -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts&action=stats"
-```
-
-### Отримати статистику для типу Біг
-
-```bash
-curl.exe -i -X POST "http://localhost/labki_php/lab6/api.php?resource=workouts&action=stats" -H "Content-Type: application/x-www-form-urlencoded" --data-urlencode "type=Біг"
-```
-
-### Перевірити непідтримуваний метод
-
-```bash
-curl.exe -i -X PUT "http://localhost/labki_php/lab6/api.php?resource=workouts"
-```
+| `200` | OK | Успішний GET або `stats` |
+| `201` | Created | Тренування створено |
+| `400` | Bad Request | Некоректні дані |
+| `403` | Forbidden | Неправильний CSRF-токен |
+| `404` | Not Found | Ресурс або запис не знайдено |
+| `405` | Method Not Allowed | Метод не підтримується |
+| `500` | Internal Server Error | Внутрішня помилка |
